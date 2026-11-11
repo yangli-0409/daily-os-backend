@@ -193,6 +193,38 @@ test('a source that is neither long strings nor lists is evicted, and the evicti
   assert.ok(result.notes.some((note) => note.includes('chrome_snapshot') && note.includes('整源裁掉')));
 });
 
+test('the scored candidates outlive chat and tabs — a plan without them has nothing to rank', () => {
+  // The shape that produced an empty morning plan: every source already under
+  // its own cap, the total still over, and `todo_scored` unranked so it went
+  // first. Wide objects so neither the string cap nor list-thinning can help.
+  const wide = (n: number): Record<string, string> => Object.fromEntries(Array.from({ length: n }, (_, i) => [`k_${i}`, `v${i}`]));
+  const evidence = evidenceWith({
+    todo_scored: { state: 'available', data: { top: Array.from({ length: 12 }, (_, i) => ({ candidateId: `c${i}`, text: `candidate ${i} ${'t'.repeat(300)}` })) } },
+    cycle_focus: { state: 'available', data: { experiment: 'e'.repeat(1_200) } },
+    fixed_schedule: { state: 'available', data: { rows: Array.from({ length: 12 }, (_, i) => ({ start: '09:00', end: '10:00', title: `row ${i} ${'r'.repeat(100)}` })) } },
+    feishu_minutes_bot_im_history: { state: 'available', data: wide(600) },
+    chrome_snapshot: { state: 'available', data: wide(600) },
+  });
+  const result = fitEvidenceToBudget(evidence, 'daily_plan', 12_000);
+  assert.ok(result.after <= 12_000, `evidence was still ${result.after} chars`);
+  for (const name of ['todo_scored', 'cycle_focus', 'fixed_schedule']) {
+    assert.equal(result.evidence.sources[name]?.state, 'available', `${name} should outlive chat and tabs`);
+  }
+  assert.ok(result.notes.some((note) => note.includes('chrome_snapshot') && note.includes('整源裁掉')));
+});
+
+test('a review keeps the plan it reconciles against', () => {
+  const wide = Object.fromEntries(Array.from({ length: 2_000 }, (_, i) => [`tab_${i}`, `t${i}`]));
+  const evidence = evidenceWith({
+    daily_plan_todos: { state: 'available', data: { date: '2026-09-11', todos: Array.from({ length: 8 }, (_, i) => ({ candidateId: `c${i}`, text: `todo ${i} ${'t'.repeat(200)}` })) } },
+    todo_feedback: { state: 'available', data: { date: '2026-09-11', entries: Array.from({ length: 8 }, (_, i) => ({ event: 'complete', text: `todo ${i} ${'t'.repeat(200)}` })) } },
+    chrome_snapshot: { state: 'available', data: wide },
+  });
+  const result = fitEvidenceToBudget(evidence, 'daily_review', 10_000);
+  assert.equal(result.evidence.sources.daily_plan_todos?.state, 'available');
+  assert.equal(result.evidence.sources.todo_feedback?.state, 'available');
+});
+
 test('eviction never wastes itself on sources too small to matter', () => {
   const wide = Object.fromEntries(Array.from({ length: 4_000 }, (_, i) => [`tab_${i}`, `t${i}`]));
   const evidence = evidenceWith({

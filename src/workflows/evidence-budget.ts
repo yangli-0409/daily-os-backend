@@ -61,8 +61,20 @@ const DEFAULT_SOURCE_CAP = 25_000;
  * Ordered by what a plan cannot be made without. The user's own priorities and
  * inbox come first because they are the answer; chat and open browser tabs come
  * last because they are atmosphere.
+ *
+ * The sources `runWorkflow` builds itself lead the list. They are not evidence
+ * about the day so much as the question being asked: `todo_scored` is the only
+ * place a `daily_plan` can find its candidates (the raw Linear list is dropped
+ * above on the strength of it), and `daily_plan_todos` / `todo_feedback` are
+ * what a review reconciles against. Left unranked they were evicted before
+ * browser tabs, and the plan came back with an empty todo list.
  */
 const KEEP_ORDER = [
+  'todo_scored',
+  'cycle_focus',
+  'fixed_schedule',
+  'daily_plan_todos',
+  'todo_feedback',
   'weekly_priorities',
   'todo_inbox',
   'progress_ledger',
